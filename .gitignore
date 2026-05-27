@@ -1,0 +1,19 @@
+# 忽略敏感的环境变量配置文件
+.env
+.env.local
+
+# 忽略 Python 缓存文件
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 忽略虚拟环境或依赖包目录
+.venv/
+venv/
+env/
+Lib/
+site-packages/
+
+# 忽略本地生成的流程图图片
+*.png

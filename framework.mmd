@@ -1,0 +1,52 @@
+graph TD
+    %% Style Definitions
+    classDef signalClass fill:#e0f7fa,stroke:#00838f,stroke-width:2px,stroke-dasharray: 5 5;
+    classDef memoryClass fill:#fff3e0,stroke:#e65100,stroke-width:2px;
+    classDef supervisorClass fill:#eceff1,stroke:#37474f,stroke-width:2px;
+    classDef entityClass fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px;
+    classDef endClass fill:#ffebee,stroke:#c62828,stroke-width:2px;
+
+    %% Signal Producing Entities
+    UserInput([User Input]):::entityClass
+    Agent1[Agent 1 / Role A]:::entityClass
+    Agent2[Agent 2 / Role B]:::entityClass
+
+    %% Unified Event Bus
+    EventBus{{"Unified Event Bus"}}:::signalClass
+
+    %% Core Processing Units
+    GlobalMemory[(Global Memory: State & History)]:::memoryClass
+    Supervisor{"Supervisor Agent"}:::supervisorClass
+
+    %% Dispatch Actions
+    EndNode([Game Over / Termination]):::endClass
+    RequestUser([Request User Input]):::signalClass
+    ActivateA[Activate: Agent 1]:::entityClass
+    ActivateB[Activate: Agent 2]:::entityClass
+
+    %% --- Data & Control Flow ---
+    
+    %% Step 1: All execution entities broadcast their outputs to the Bus
+    UserInput --> EventBus
+    Agent1 --> EventBus
+    Agent2 --> EventBus
+
+    %% Step 2: The Bus splits data concurrently to Memory and Supervisor
+    EventBus -->|Append Log| GlobalMemory
+    EventBus -->|Current Token Xt| Supervisor
+
+    %% Step 3: Supervisor evaluates Xt against the Context fetched from Memory
+    GlobalMemory -->|Context & Metrics| Supervisor
+
+    %% Step 4: Supervisor makes a 4-way decision matrix
+    Supervisor -->|Option A| EndNode
+    Supervisor -->|Option B| RequestUser
+    Supervisor -->|Option C| ActivateA
+    Supervisor -->|Option D| ActivateB
+
+    %% Step 5: Activation flows forward cleanly to trigger the next turn
+    ActivateA --> Agent1
+    ActivateB --> Agent2
+    RequestUser --> UserInput
+
+    style EventBus fill:#e0f2f1,stroke:#004d40,stroke-width:3px;
