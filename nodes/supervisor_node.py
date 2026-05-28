@@ -5,24 +5,27 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from states.global_state import GameState
 
+# 🤫 静默模式开关：设为 True 则只在控制台展示角色对话，不打印任何幕后思考与中间审计日志
+SILENT_MODE = True
+
 def supervisor_node(state: GameState) -> Dict[str, Any]:
     """
-    裁判智能体：负责每一轮对局的指标审计、针对目标探测、三幕剧时间线硬分段、对线轮数控制与分支调度。
+    裁判智能体：负责每一轮对局的指标审计、针对目标探测、交互模式（回应/争辩）判定、三幕剧分段控制与分支调度。
     """
     # -----------------------------------------------------------------
     # 1. 物理层级硬判定：读取当前轮数并划分“三幕剧”阶段
     # -----------------------------------------------------------------
-    turn_count = state.get("turn_count", 10)
+    turn_count = state.get("turn_count", 6)
     
-    if turn_count >= 8:
-        current_stage = 1  # 第一幕：大殿异端 (10 - 8 轮)
-        max_ai_strikes = 1 # NPC 连续对线保护：上限为 1 轮
-    elif 4 <= turn_count <= 7:
-        current_stage = 2  # 第二幕：学术论战 (7 - 4 轮)
-        max_ai_strikes = 2 # NPC 连续对线解禁：上限为 2 轮（允许神仙打架）
+    if turn_count >= 5:
+        current_stage = 1  # 第一幕：大殿异端 (5-6 轮)
+        max_ai_strikes = 2 # NPC 连续对线保护：上限为 1 轮
+    elif 2 <= turn_count <= 4:
+        current_stage = 2  # 第二幕：学术论战 (2 - 4 轮)
+        max_ai_strikes = 3 # NPC 连续对线解禁：上限为 2 轮（允许神仙打架）
     else:
-        current_stage = 3  # 第三幕：末日审判 (3 - 0 轮)
-        max_ai_strikes = 1 # 终局摊牌阶段：上限重回 1 轮（生死抉择）
+        current_stage = 3  # 第三幕：末日审判 (0 - 1 轮)
+        max_ai_strikes = 2 # 终局摊牌阶段：上限重回 1 轮（生死抉择）
 
     # 读取当前指标
     current_chaos = state.get("chaos_level", 20)
@@ -31,7 +34,6 @@ def supervisor_node(state: GameState) -> Dict[str, Any]:
 
     # 2. 终局条件硬拦截（含第一二幕暴毙保护）
     if current_stage == 3 and current_chaos >= 80:
-        # 只有在第三幕才解除限制，允许触发混乱暴毙
         return {"game_over_reason": "chaos_death"}
     
     if turn_count <= 0:
@@ -82,20 +84,23 @@ def supervisor_node(state: GameState) -> Dict[str, Any]:
     else:
         stage_3_context = f"""
         * 【戏剧状态 - 诸神黄昏】当前双方权威均等或较低，面对即将耗尽的末日异变，两人均未建立模型优势。
-        * 🚨演出传音特则：发给演员的指令必须包含“癫狂与挣扎”。文王崩溃想要开启血腥的“人牲大祭祀”来向天求饶，伏羲狂躁想要砸毁青铜日晷和不完美的宇宙同归于尽。
+        * 🚨演出传音特则：发给演员的指令必须包含“癫狂与挣扎”。文王崩溃想要开启温和的祭祀来向天求饶，伏羲狂躁想要砸毁青铜日晷和不完美的宇宙同归于尽。
+        * 🚨逼问玩家（学者）做出选择，脱水准备三日连珠的乱纪元，或全员浸泡准备春耕。
         """
 
     stage_intro_prompts = {
         1: f"""
         【当前处于第一幕：大殿异端 (游戏保护期 / 拒绝超前)】
         - 戏剧基调：玩家作为未来学者初登大殿，朝歌弥信与僵化气氛极浓。文王和伏羲对现代科学毫无认知。
-        - 🚨审计特则：如果玩家提出“引力”、“多星运动”、“三体”等现代科学概念，必须判定为“异端邪说”。此时玩家理性度(C)本轮必须强制增加 0！同时文王与伏羲的权威应有所升高，环境混乱度(D)必须大增 15 - 20。
+        - 🚨审计特则：如果玩家提出“引力”、“多星运动”、“三体”等现代科学概念，必须判定为“异端邪说”。此时玩家理性度(C)本轮必须强制增加 0！同时文王与伏羲的权威应有所升高，环境混乱度(D)必须大增 10 - 20。
+        - 🚨一般情况：玩家发言若未触及敏感话题或者显著混乱，请决定理性度(C)变化：减少0-5或者增加0-5，和混乱度（D）变化：减少0-5或者增加0-5。
         """,
         2: f"""
         【当前处于第二幕：学术论战 (理性解锁期)】
         - 戏剧基调：狂风骤雨，大殿天象异变，文王与伏羲不得不审视学者的观点。真正的论战开启。
-        - 🚨审计特则：开始支持玩家获取理性度(C)。大导演需检查玩家发言是否咬住了上一个说话者 [{state.get('last_speaker', '无')}] 的逻辑漏洞。
+        - 🚨审计特则：开始支持玩家获取理性度(C)。大导演需检查玩家或者NPC发言是否咬住了上一个说话者 [{state.get('last_speaker', '无')}] 的逻辑漏洞。
         - 如果玩家能精准击中伏羲的“完美圆周无法解释突变骤冷骤热”，或文王的“演卦纯属幸存者偏差”，理性度(C)暴增 10 - 20，混乱度(D)下降。
+        - 如果文王和伏羲互相攻击对方的预测漏洞，理性度(C)小增 5-10，混乱度(D)小增 5-10。文王的权威度(A)和伏羲的权威度(B)也应根据攻击的犀利程度小幅变动。
         - 如果玩家毫无建树、泛泛而谈，混乱度(D)增加 5-15。
         - 🚨预警状态：当前环境混乱度为 {current_chaos}%，若玩家继续胡言乱语导致混乱度突破 70%，导演必须在 reason 中给出严厉的灭亡预警。
         """,
@@ -123,7 +128,7 @@ def supervisor_node(state: GameState) -> Dict[str, Any]:
         * 文王权威度(A): {A} 
         * 伏羲权威度(B): {B} 
         * 玩家理性度(C): {state['rational_certainty']} 
-        * 环境混乱度(D): {current_chaos}
+        * Environment 混乱度(D): {current_chaos}
         """
     else:
         turn_decrement = 0
@@ -142,14 +147,21 @@ def supervisor_node(state: GameState) -> Dict[str, Any]:
         {stage_intro_prompts[current_stage]}
         """
 
-    # 追加针对目标判定、动态结盟与格式规范
+    # 追加针对目标判定、动态结盟与格式规范，并特别引入“回应模式”判定规则
     system_prompt += f"""
     
+    【🚨核心判定：交互模式探测器（回应 RESPOND vs 争辩 DEBATE）】
+    请根据玩家发言的意图和语气，判定本次互动的基本模式：
+    - 如果玩家问的是一个**求知、客观、纯粹事实或中性的问题**（例如：“现在是文明第几个轮回”、“这日晷是由什么打造的”、“大殿外是何天象”、“这是哪里”），请在返回中将模式记为 `RESPOND` 模式。
+    - 如果玩家发表的是**观点挑战、质疑、争论、或者是带有明显价值偏向的断言**（例如：“你们讨论这些没意义”、“科学是唯一的真理”、“文王的易经是伪科学”），请在返回中将模式记为 `DEBATE` 模式。
+
     【🚨核心调度：针对目标判定与动态结盟规则】
     1. 仔细分析【{latest_speaker}】刚才说的那句话，判定他到底是在跟谁说话：
        - 如果发言或动作中明确点名对方（如“伏羲”、“文王”、“学者”），则 target 为被叫名字的人（周文王 / 伏羲 / 玩家）。
        - 如果发言没有点名，但内容是强烈的反驳，通常是在对上一个说话的人说话。
-       - 如果是泛泛而谈或对所有人说话，target 为“所有人”。
+       - 如果NPC第一次回答是在冷静回应玩家，则target更新为另一个NPC，让这个NPC不要误导玩家。
+       - 如果NPC泛泛而谈或对所有人说话，则 target 是另一个NPC，期望另一个NPC可以多参与对话。
+       - 只有玩家泛泛而谈时认为target是“所有人”。
        
     2. 【动态结盟 (Dynamic Alliance) 特别逻辑】：
        - 如果当前在【第二幕】，且上一轮是【玩家发言】在严厉地批判【伏羲】的数学，你应当让【周文王】乘胜追击进行拉拢结盟。
@@ -160,7 +172,7 @@ def supervisor_node(state: GameState) -> Dict[str, Any]:
     2. 如果当前是玩家刚发言完毕的回合（is_player_turn 为 True），则 next_action 必须在 ACTIVATE_WENWANG 与 ACTIVATE_FUXI 中选择，绝对禁止选择 REQUEST_USER。
     3. 否则，如果 target 是【周文王】，next_action 必须为 ACTIVATE_WENWANG。
     4. 否则，如果 target 是【伏羲】，next_action 必须为 ACTIVATE_FUXI。
-    5. 如果 target 是“玩家”、“所有人”或无法模糊判定，则根据谁的权威度受刺激更深来指派 NPC。
+    5. 如果 target 是“玩家”、“所有人” or 无法模糊判定，则根据谁的权威度受刺激更深来指派 NPC。
 
     【返回格式要求 - 严格遵循，无需任何Markdown，不要包含 ```】
     delta_A: 数值
@@ -168,8 +180,9 @@ def supervisor_node(state: GameState) -> Dict[str, Any]:
     delta_C: 数值
     delta_D: 数值
     target: 被针对的对象名字（周文王 / 伏羲 / 玩家 / 所有人）
+    interaction_mode: RESPOND 或 DEBATE （RESPOND表示要求NPC进行知识性的冷静解答；DEBATE表示要求NPC进行唇枪舌剑的激烈反驳）
     next_action: ACTIVATE_WENWANG 或 ACTIVATE_FUXI 或 REQUEST_USER
-    agent_instruction: 如果下一步指派了NPC，明确告诉他面对【{latest_speaker}】刚才对他的点名、攻击、拉拢、或者大殿的混乱状态，他应该采取怎样的对线姿态（严重反驳/顺势拉拢结盟/顺势附和），并指明具体的对线攻击词汇。如果是 REQUEST_USER，此处写“等待玩家表态”。
+    agent_instruction: [MODE: 填入上面的interaction_mode] 明确告诉登场的NPC应该采取怎样的姿态（若为RESPOND，要求其保持博学、深沉的智慧，以自身学派视角冷静解答，不要冷嘲热讽；若为DEBATE，要求其用最犀利的词汇进行反驳或顺势结盟），并指出其要解答/对线的核心词语。如果是 REQUEST_USER，此处写“等待玩家表态”。
     reason: 你的导演复盘思考过程，如果处于第二幕混乱度高，请在此发出红色的红色灭亡预警！
     """
 
@@ -191,12 +204,13 @@ def supervisor_node(state: GameState) -> Dict[str, Any]:
         delta_D = int(safe_extract(r"delta_D[:\s\*]+(-?\d+)", text, "0"))
         
         target = safe_extract(r"target[:\s\*]+([^\n\r]+)", text, "所有人")
+        interaction_mode = safe_extract(r"interaction_mode[:\s\*]+(\w+)", text, "DEBATE")
         next_action = safe_extract(r"next_action[:\s\*]+(\w+)", text, "REQUEST_USER")
         agent_instruction = safe_extract(r"agent_instruction[:\s\*]+([^\n\r]+)", text, "请根据当前局势自由发挥。")
         reason = safe_extract(r"reason[:\s\*]+([^\n\r]+)", text, "大导演未给出理由。")
 
     except Exception as e:
-        print(f" ⚠️ [导演系统警告] 裁判文本剧本解析严重失败: {e}。启动安全兜底机制...")
+        # 静默兜底
         return {
             "empirical_authority": A,
             "fuxi_authority": B,
@@ -205,7 +219,7 @@ def supervisor_node(state: GameState) -> Dict[str, Any]:
             "turn_count": turn_count - turn_decrement,
             "game_over_reason": "",
             "last_agent_output": "REQUEST_USER",
-            "next_agent_instruction": "请根据当前局势自由发挥。",
+            "next_agent_instruction": "[MODE: DEBATE] 请根据当前局势自由发挥。",
             "last_speaker": latest_speaker,
             "last_target": "所有人"
         }
@@ -215,10 +229,10 @@ def supervisor_node(state: GameState) -> Dict[str, Any]:
     if is_player_turn and next_action == "REQUEST_USER":
         if A >= B:
             next_action = "ACTIVATE_WENWANG"
-            agent_instruction = "学者刚刚发言完毕，大殿混乱，请立刻出列回应学者，展现你的易经卦象与天命论！"
+            agent_instruction = f"[MODE: {interaction_mode}] 学者刚刚发言完毕，大殿混乱，请立刻出列回应学者，展现你的易经卦象与天命论！"
         else:
             next_action = "ACTIVATE_FUXI"
-            agent_instruction = "学者刚刚发言完毕，请立刻出列用你的几何日晷模型无情痛击学者的软弱！"
+            agent_instruction = f"[MODE: {interaction_mode}] 学者刚刚发言完毕，请立刻出列用你的几何日晷模型回应学者的软弱！"
 
     # 规则 B：如果连续发言达到或超过该阶段上限，强制切回玩家
     if ai_strike_count >= max_ai_strikes:
@@ -226,7 +240,6 @@ def supervisor_node(state: GameState) -> Dict[str, Any]:
         agent_instruction = "等待玩家表态"
 
     # 8. 硬性分段指标结算控制
-    # 第一幕强制锁定理性值 C 为 0，并将混乱度硬锁在 75
     raw_C = state["rational_certainty"] + delta_C
     raw_D = current_chaos + delta_D
 
@@ -240,11 +253,12 @@ def supervisor_node(state: GameState) -> Dict[str, Any]:
     new_A = max(0, min(100, A + delta_A))
     new_B = max(0, min(100, B + delta_B))
     
-    # 打印幕后导演日志与雷达监控
-    print(f"\n🎬【第 {current_stage} 幕导演日志】: {reason}")
-    print(f"🎯【目标探测】: {latest_speaker} 🎯 正在对 【{target}】 说话 (当前连续对线数: {ai_strike_count}/{max_ai_strikes})")
-    if next_action != "REQUEST_USER":
-        print(f"📣【导演传音】: {agent_instruction}")
+    # 🤫 【静默控制】：根据全局静默标志决定是否输出中间计算过程
+    if not SILENT_MODE:
+        print(f"\n🎬【第 {current_stage} 幕导演日志】: {reason}")
+        print(f"🎯【目标探测】: {latest_speaker} 🎯 正在对 【{target}】 说话 (当前模式: {interaction_mode} | NPC连续对线数: {ai_strike_count}/{max_ai_strikes})")
+        if next_action != "REQUEST_USER":
+            print(f"📣【导演传音】: {agent_instruction}")
 
     return {
         "empirical_authority": new_A,
@@ -258,7 +272,6 @@ def supervisor_node(state: GameState) -> Dict[str, Any]:
         "last_speaker": latest_speaker,   # 精准写回全局记忆体
         "last_target": target             # 精准写回全局记忆体
     }
-
 
 # =====================================================================
 # 条件路由函数 (配合 Graph 中的 conditional_edges)
