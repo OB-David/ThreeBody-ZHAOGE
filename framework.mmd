@@ -7,16 +7,16 @@ graph TD
     classDef endClass fill:#ffebee,stroke:#c62828,stroke-width:2px;
 
     %% Signal Producing Entities
-    UserInput([User Input]):::entityClass
-    Agent1[Agent 1 / Role A]:::entityClass
-    Agent2[Agent 2 / Role B]:::entityClass
+    UserInput([User Input/ 学者]):::entityClass
+    Agent1[Agent 1 / 文王]:::entityClass
+    Agent2[Agent 2 / 伏羲]:::entityClass
 
     %% Unified Event Bus
     EventBus{{"Unified Event Bus"}}:::signalClass
 
     %% Core Processing Units
-    GlobalMemory[(Global Memory: State & History)]:::memoryClass
-    Supervisor{"Supervisor Agent"}:::supervisorClass
+    GlobalMemory[(Global Memory: State)]:::memoryClass
+    Supervisor{"Supervisor Agent/ 导演"}:::supervisorClass
 
     %% Dispatch Actions
     EndNode([Game Over / Termination]):::endClass

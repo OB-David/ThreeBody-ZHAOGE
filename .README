@@ -1,0 +1,102 @@
+# 🌌 三体-朝歌：基于 LangGraph 的《三体》天象辩论
+
+> “这是文明的生死抉择——脱水，还是浸泡？”
+
+> 本项目是一个基于 **LangGraph** 架构打造的科幻角色扮演对话系统。玩家将化身学者出现朝歌大殿，在导演的宏观指标审计下，与周文王（经验主义）和伏羲（机械数学）展开关于恒纪元乱纪元预测的终极思辨。
+
+> 游戏语言：中文，古汉语
+
+---
+
+## 核心架构
+
+系统的核心运转完全由 **LangGraph** 的状态图驱动。系统采用**中心化控制机制**，导演节点作为核心路由器与状态审计器，负责完成对全局状态的认知，并在指派智能体回复时下达具体的行动指令。而智能体则作为“纯粹的人格实体”，仅保留底层的世界观与性格预设，严格服从并执行导演节点的调度指令。
+
+### 拓扑结构图
+
+```mermaid
+graph TD
+    %% Style Definitions
+    classDef signalClass fill:#e0f7fa,stroke:#00838f,stroke-width:2px,stroke-dasharray: 5 5;
+    classDef memoryClass fill:#fff3e0,stroke:#e65100,stroke-width:2px;
+    classDef supervisorClass fill:#eceff1,stroke:#37474f,stroke-width:2px;
+    classDef entityClass fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px;
+    classDef endClass fill:#ffebee,stroke:#c62828,stroke-width:2px;
+
+    %% Signal Producing Entities
+    UserInput([User Input/ 学者]):::entityClass
+    Agent1[Agent 1 / 文王]:::entityClass
+    Agent2[Agent 2 / 伏羲]:::entityClass
+
+    %% Unified Event Bus
+    EventBus{{"Unified Event Bus"}}:::signalClass
+
+    %% Core Processing Units
+    GlobalMemory[(Global Memory: State)]:::memoryClass
+    Supervisor{"Supervisor Agent/ 导演"}:::supervisorClass
+
+    %% Dispatch Actions
+    EndNode([Game Over / Termination]):::endClass
+    RequestUser([Request User Input]):::signalClass
+    ActivateA[Activate: Agent 1]:::entityClass
+    ActivateB[Activate: Agent 2]:::entityClass
+
+    %% --- Data & Control Flow ---
+    
+    %% Step 1: All execution entities broadcast their outputs to the Bus
+    UserInput --> EventBus
+    Agent1 --> EventBus
+    Agent2 --> EventBus
+
+    %% Step 2: The Bus splits data concurrently to Memory and Supervisor
+    EventBus -->|Append Log| GlobalMemory
+    EventBus -->|Current Token Xt| Supervisor
+
+    %% Step 3: Supervisor evaluates Xt against the Context fetched from Memory
+    GlobalMemory -->|Context & Metrics| Supervisor
+
+    %% Step 4: Supervisor makes a 4-way decision matrix
+    Supervisor -->|Option A| EndNode
+    Supervisor -->|Option B| RequestUser
+    Supervisor -->|Option C| ActivateA
+    Supervisor -->|Option D| ActivateB
+
+    %% Step 5: Activation flows forward cleanly to trigger the next turn
+    ActivateA --> Agent1
+    ActivateB --> Agent2
+    RequestUser --> UserInput
+
+    style EventBus fill:#e0f2f1,stroke:#004d40,stroke-width:3px;
+```
+
+
+##  核心机制
+
+* **动态导演节点**：打破传统的固定轮询机制。导演根据玩家发言和当前环境，动态调整“文王权威”、“伏羲权威”、“玩家理性”以及“环境混乱度”四大隐藏指标，决定发言顺序和发言内容。
+* **三幕式戏剧冲突**：
+    * *第一幕：大殿异端*（世界观建立）。
+    * *第二幕：学术论战*（模型方法漏洞精准打击）。
+    * *第三幕：末日审判*（世界观崩溃或理定制霸，逼问终极抉择）。
+* **严格状态流转**：全局状态跟踪，配合硬编码兜底防线，严防智能体死锁或连续对线超限。
+* **动态结局**：游戏结束时，由 LLM 结合全场对局历史与最终指标，实时生成宏大笔触的结局。
+
+---
+
+## 目录结构 
+
+```text
+my_pj/agent/
+├── states/
+│   └── global_state.py       #  全局状态定义
+├── nodes/
+│   ├── supervisor_node.py    #  裁判/大导演节点 (指标审计与终局生成)   - deepseek
+│   ├── wenwang_node.py       #  周文王智能体 (经验主义)    - qwen
+│   └── fuxi_node.py          #  伏羲智能体 (几何与数学理性)    - deepseek
+├── graph.py                  #  LangGraph 图拓扑结构与路由逻辑
+├── main.py                   #  游戏启动入口
+├── requirements.txt          #  依赖
+└── .env                      #  LLM API接口（需自行添加）
+```
+
+## 
+**灵感来源：科幻小说《三体》，游戏《Façade》，电影《Source Code》**
